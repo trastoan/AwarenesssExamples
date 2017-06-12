@@ -41,7 +41,7 @@ import com.google.android.gms.location.places.PlaceLikelihood;
 
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements FenceDelegate {
 
     private static MainActivity ins;
     //Setup API Client
@@ -51,9 +51,9 @@ public class MainActivity extends AppCompatActivity {
     //Fences Setup
     private static final String FENCE_RECEIVER_ACTION = "FENCE_RECEIVE";
 
-    private FenceBroadcastReceiver fenceReceiver;
     private PendingIntent mFencePendingIntent;
 
+    private FenceCreator creator;
 
     //Text views
     public TextView activityText;
@@ -64,7 +64,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
+        //Create FenceCreator
+        creator = new FenceCreator(MainActivity.this, MainActivity.this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -75,13 +76,6 @@ public class MainActivity extends AppCompatActivity {
         localText = (TextView) findViewById(R.id.localText);
         weatherText = (TextView) findViewById(R.id.weatherText);
         headphoneText = (TextView) findViewById(R.id.headphonesText);
-
-
-        //Fence config
-        fenceReceiver = new FenceBroadcastReceiver();
-        Intent intent = new Intent(FENCE_RECEIVER_ACTION);
-        mFencePendingIntent = PendingIntent.getBroadcast(MainActivity.this, 1001, intent, 0);
-
 
         //Finish client setup
         client = new GoogleApiClient.Builder(MainActivity.this)
@@ -108,15 +102,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        //Using new fenceCreator
         registerFences();
-        registerReceiver(fenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         unregisterFences();
-        unregisterReceiver(fenceReceiver);
     }
 
 
@@ -276,128 +269,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    //Fences Examples
+    //Fences with new Creator
 
     private void registerFences() {
-        //Registering an Headphone Fence
-        AwarenessFence headphoneFence = HeadphoneFence.during(HeadphoneState.PLUGGED_IN);
-        AwarenessFence activityFence = DetectedActivityFence.during(DetectedActivityFence.WALKING);
-
-        //Multiple fence combination
-        AwarenessFence exercisingWithHeadphone = AwarenessFence.and(headphoneFence, AwarenessFence.or(activityFence, DetectedActivityFence.during(DetectedActivityFence.RUNNING), DetectedActivityFence.during(DetectedActivityFence.ON_BICYCLE)));
-
-        //Location Fence, needs latitude, longitude and radius
-        AwarenessFence homeFence = LocationFence.entering(-3.7543518, -38.5268885, 20.0);
-
-        Awareness.FenceApi.updateFences(
-                client,
-                new FenceUpdateRequest.Builder()
-                        .addFence("HeadphoneFenceKey",headphoneFence,mFencePendingIntent)
-                        .addFence("ActivityFenceKey", activityFence, mFencePendingIntent)
-                        .addFence("ExercisingWithHeadphoneKey", exercisingWithHeadphone, mFencePendingIntent)
-                        .addFence("EnteringHome", homeFence, mFencePendingIntent)
-                        .build())
-                .setResultCallback(new ResultCallback<Status>() {
-                    @Override
-                    public void onResult(@NonNull Status status) {
-                        if (status.isSuccess()) {
-                            Log.i(TAG, "Fence Registrada com sucesso");
-                        } else {
-                            Log.e(TAG, "Um erro ocorreu durante o registro :" + status);
-                        }
-                    }
-                });
+        AwarenessFence headphone = creator.registeHeadphoneFence(true, "HeadphoneFenceKey");
+        AwarenessFence walking = creator.registerActiviyFence(Activities.Walking, "ActivityFenceKey");
+        AwarenessFence[] andFences = new AwarenessFence[]{walking,headphone};
+        creator.registerAndFences(andFences, "ExercisingWithHeadphoneKey");
+        creator.registerLocationFence(-3.7543518, -38.5268885, 20.0, "EnteringHome");
     }
 
     //To avoid memory leak we must unregister fences once we finished using them
     private void unregisterFences() {
-        Awareness.FenceApi.updateFences(
-                client,
-                new FenceUpdateRequest.Builder()
-                        .removeFence("HeadphoneFenceKey")
-                        .build()).setResultCallback(new ResultCallbacks<Status>() {
-            @Override
-            public void onSuccess(@NonNull Status status) {
-                Log.i(TAG, "Headphone Fence removida com sucesso");
-            }
-
-            @Override
-            public void onFailure(@NonNull Status status) {
-                Log.e(TAG, "Headphone Fence não pode ser removida");
-            }
-        });
-
-        Awareness.FenceApi.updateFences(
-                client,
-                new FenceUpdateRequest.Builder()
-                        .removeFence("ActivityFenceKey")
-                        .build()).setResultCallback(new ResultCallbacks<Status>() {
-            @Override
-            public void onSuccess(@NonNull Status status) {
-                Log.i(TAG, "Activity Fence removida com sucesso");
-            }
-
-            @Override
-            public void onFailure(@NonNull Status status) {
-                Log.e(TAG, "Activity Fence não pode ser removida");
-            }
-        });
+        creator.unregisterFences();
     }
 
-
-}
-
-class FenceBroadcastReceiver extends BroadcastReceiver {
-
-    private static final String TAG = "Awaraness";
-
+    //Handle changes on fence
     @Override
-    public void onReceive(Context context, Intent intent) {
-        FenceState fenceState = FenceState.extract(intent);
-        Log.d(TAG, "Estado recebido : " + fenceState.getFenceKey());
-        if (TextUtils.equals(fenceState.getFenceKey(), "HeadphoneFenceKey")) {
-            switch (fenceState.getCurrentState()) {
-                case FenceState.TRUE:
-                    Log.i(TAG, "Fence > Headphones Conectados");
-                    MainActivity.getInstance().updateHeadphoneText("Conectado");
-                    break;
-                case FenceState.FALSE:
-                    Log.i(TAG, "Fence > Headphones desconectados.");
-                    MainActivity.getInstance().updateHeadphoneText("Desconectado");
-                    break;
-                case FenceState.UNKNOWN:
-                    Log.i(TAG, "Fence > A Fence possui um estado desconhecido.");
-                    break;
-            }
-        }if (TextUtils.equals(fenceState.getFenceKey(), "ActivityFenceKey")) {
-            switch (fenceState.getCurrentState()) {
-                case FenceState.TRUE:
-                    Log.i(TAG, "Fence > User Walking");
-                    MainActivity.getInstance().updateActvityText("Tilt");
-                    break;
-                case FenceState.FALSE:
-                    Log.i(TAG, "Fence > User not walking");
-                    MainActivity.getInstance().updateActvityText("Parado");
-                    break;
-                case FenceState.UNKNOWN:
-                    Log.i(TAG, "Fence > A Fence possui um estado desconhecido.");
-                    break;
-            }
-        }
-        if (TextUtils.equals(fenceState.getFenceKey(), "ExercisingWithHeadphoneKey")) {
-            switch (fenceState.getCurrentState()) {
-                case FenceState.TRUE:
-                    Log.i(TAG, "Fence > Exercising With Headphone");
-                    MainActivity.getInstance().updateActvityText("Exercising With Headphones");
-                    break;
-                case FenceState.FALSE:
-                    Log.i(TAG, "Fence > User Still");
-                    MainActivity.getInstance().updateActvityText("Exercising");
-                    break;
-                case FenceState.UNKNOWN:
-                    Log.i(TAG, "Fence > A Fence possui um estado desconhecido.");
-                    break;
-            }
+    public void fenceHasChanged(String title, Boolean state) {
+        if(TextUtils.equals(title, "HeadphoneFenceKey")){
+            updateHeadphoneText(state ? "Conectado" : "Desconectado");
+        }else if (TextUtils.equals(title, "ActivityFenceKey")){
+            updateActvityText(state ? "Tilt" : "Parado");
+        }else if (TextUtils.equals(title, "ExercisingWithHeadphoneKey")) {
+            updateActvityText(state ? "Exercising With Headphones" : "Exercising");
         }
     }
 }
