@@ -1,4 +1,4 @@
-package com.example.yuri.awarennesexample;
+package com.example.yuri.awarennesexample.Fence;
 
 import android.Manifest;
 import android.app.Activity;
@@ -9,7 +9,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.google.android.gms.awareness.Awareness;
@@ -24,8 +23,6 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.common.api.ResultCallbacks;
 import com.google.android.gms.common.api.Status;
-import com.google.android.gms.common.server.converter.StringToIntConverter;
-import com.google.android.gms.location.DetectedActivity;
 
 import java.util.ArrayList;
 
@@ -106,7 +103,7 @@ public class FenceCreator extends BroadcastReceiver {
         return location;
     }
 
-    public AwarenessFence registeHeadphoneFence(Boolean plugged, String title) {
+    public AwarenessFence registerHeadphoneFence(Boolean plugged, String title) {
         int headphoneState = plugged ? HeadphoneState.PLUGGED_IN : HeadphoneState.UNPLUGGED;
         AwarenessFence headphoneFence = HeadphoneFence.during(headphoneState);
         updateFence(headphoneFence, title);
